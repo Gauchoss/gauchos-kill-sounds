@@ -1,0 +1,43 @@
+name: build
+on:
+  push:
+    paths-ignore:
+      - 'killsounds/**'
+      - 'backgrounds/**'
+      - 'gallery/**'
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: validate gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
+      - name: build
+        run: ./gradlew build -Pgallery_repo=${{ github.repository }} -Pgallery_branch=${{ github.ref_name }} -Pversion=1.0.${{ github.run_number }}
+      - name: upload jar
+        uses: actions/upload-artifact@v7
+        with:
+          name: gauchos-kill-sounds
+          path: build/libs/
+      - name: publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Gauchos Kill Sounds 1.0.${{ github.run_number }}
+          body: Fuer Minecraft 1.21.11 (Fabric). Braucht Fabric API.
+          files: build/libs/*.jar
+          make_latest: true
