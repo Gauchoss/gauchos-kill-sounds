@@ -1,0 +1,43 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+base {
+	archivesName = 'gauchos-kill-sounds'
+}
+
+repositories {
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+	def version = project.version
+	def galleryRepo = project.findProperty("gallery_repo") ?: ""
+	def galleryBranch = project.findProperty("gallery_branch") ?: "main"
+	inputs.property "version", version
+	inputs.property "galleryRepo", galleryRepo
+	inputs.property "galleryBranch", galleryBranch
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+	filesMatching("gauchos_killsounds_source.json") {
+		expand "repo": galleryRepo, "branch": galleryBranch
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = "UTF-8"
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
