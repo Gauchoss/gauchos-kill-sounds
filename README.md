@@ -43,6 +43,8 @@ ausgesucht aus Gauchos Sound-Sammlung hier im Repo. Menü mit Taste **G**.
 ## 4. Hintergrundbilder fürs Menü
 
 - Ordner `backgrounds/` – PNG, JPG, GIF oder BMP (am schärfsten mit 1920×1080).
+- **GIFs laufen im Menü animiert**, mit dem Tempo der GIF. In der Auswahl sind sie mit „GIF“ markiert.
+  Sehr lange oder große GIFs werden automatisch verkleinert (max. 150 Bilder), damit das Spiel flüssig bleibt.
 - Jeder Spieler sucht sich unter **⚙ → Hintergrund** eins aus. Ohne Auswahl wird das erste benutzt.
 
 ## Das Menü

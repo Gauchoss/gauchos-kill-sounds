@@ -48,20 +48,43 @@ public class SoundRepository {
 		}
 	}
 
-	/** Hintergrundbild fuers Menue. */
+	/** Hintergrundbild fuers Menue – ein Bild oder (bei GIFs) mehrere Einzelbilder. */
 	public static final class Background {
 		public final String name;
-		public final String sha;
 		public final int index;
 		public final int width;
 		public final int height;
+		/** Cache-Dateinamen der Einzelbilder (bei normalen Bildern genau eins). */
+		public final List<String> frames;
+		/** Anzeigedauer jedes Einzelbilds in ms. */
+		public final int[] delaysMs;
+		public final int totalMs;
 
-		Background(String name, String sha, int index, int width, int height) {
+		Background(String name, int index, int width, int height, List<String> frames, int[] delaysMs) {
 			this.name = name;
-			this.sha = sha;
 			this.index = index;
 			this.width = width;
 			this.height = height;
+			this.frames = List.copyOf(frames);
+			this.delaysMs = delaysMs;
+			int sum = 0;
+			for (int d : delaysMs) sum += d;
+			this.totalMs = Math.max(1, sum);
+		}
+
+		public boolean isAnimated() {
+			return frames.size() > 1;
+		}
+
+		/** Welches Einzelbild gerade dran ist. */
+		public int frameAt(long timeMs) {
+			if (!isAnimated()) return 0;
+			long t = timeMs % totalMs;
+			for (int i = 0; i < delaysMs.length; i++) {
+				t -= delaysMs[i];
+				if (t < 0) return i;
+			}
+			return delaysMs.length - 1;
 		}
 	}
 
@@ -232,31 +255,60 @@ public class SoundRepository {
 		for (String name : bgNames) {
 			String sha = backgrounds.get(name);
 			if (!Files.exists(cacheFile(sha))) continue;
-			String key = sha;
-			int[] size = pngSize(cacheFile(key));
-			if (size == null) {
-				// JPG/GIF/BMP -> in PNG umwandeln, Minecraft kann nur PNG
-				key = sha + ".png";
-				Path converted = cacheFile(key);
-				if (!Files.exists(converted)) {
-					try {
-						ImageConverter.toPng(cacheFile(sha), converted);
-					} catch (Throwable e) {
-						GauchosKillSounds.LOGGER.warn("Hintergrund {} konnte nicht umgewandelt werden: {}", name, e.toString());
-					}
-				}
-				size = Files.exists(converted) ? pngSize(converted) : null;
-			}
-			if (size == null) {
+			Background bg = prepareBackground(name, sha, bgList.size());
+			if (bg == null) {
 				skipped++;
 				continue;
 			}
-			bgList.add(new Background(name, key, bgList.size(), size[0], size[1]));
+			bgList.add(bg);
 		}
 
 		status = (offline ? "Offline – " : "") + soundList.size() + " Sounds · " + bgList.size() + " Hintergründe"
 				+ (skipped > 0 ? " (" + skipped + " Bild(er) unlesbar)" : "");
 		return new Snapshot(List.copyOf(soundList), List.copyOf(bgList));
+	}
+
+	/**
+	 * Macht aus einer Bilddatei einen Hintergrund. PNG wird direkt benutzt, JPG/BMP umgewandelt,
+	 * GIFs in Einzelbilder zerlegt (das Ergebnis wird im Cache gemerkt).
+	 */
+	private Background prepareBackground(String name, String sha, int index) {
+		Path file = cacheFile(sha);
+		try {
+			if (ImageConverter.isGif(file)) {
+				Path info = cacheFile(sha + ".anim");
+				if (!Files.exists(info)) {
+					ImageConverter.GifInfo gif = ImageConverter.readGif(file,
+							(i, image) -> ImageConverter.writePng(image, cacheFile(sha + ".f" + i + ".png")));
+					StringBuilder sb = new StringBuilder();
+					sb.append(gif.width()).append(' ').append(gif.height()).append('\n');
+					for (int d : gif.delaysMs()) sb.append(d).append('\n');
+					Files.writeString(info, sb.toString(), StandardCharsets.UTF_8);
+				}
+				List<String> lines = Files.readAllLines(info, StandardCharsets.UTF_8);
+				String[] size = lines.get(0).trim().split(" ");
+				List<String> keys = new ArrayList<>();
+				int[] delays = new int[lines.size() - 1];
+				for (int i = 1; i < lines.size(); i++) {
+					keys.add(sha + ".f" + (i - 1) + ".png");
+					delays[i - 1] = Integer.parseInt(lines.get(i).trim());
+				}
+				return new Background(name, index, Integer.parseInt(size[0]), Integer.parseInt(size[1]), keys, delays);
+			}
+			String key = sha;
+			int[] size = pngSize(file);
+			if (size == null) {
+				key = sha + ".png";
+				Path converted = cacheFile(key);
+				if (!Files.exists(converted)) ImageConverter.toPng(file, converted);
+				size = pngSize(converted);
+			}
+			if (size == null) return null;
+			return new Background(name, index, size[0], size[1], List.of(key), new int[]{0});
+		} catch (Throwable e) {
+			GauchosKillSounds.LOGGER.warn("Hintergrund {} konnte nicht gelesen werden: {}", name, e.toString());
+			return null;
+		}
 	}
 
 	private void download(Map<String, String> shaToPath, List<String> missing) {

@@ -242,19 +242,22 @@ public class KillSoundsScreen extends Screen {
 				rowY += thumbH + GAP;
 			}
 			boolean sel = Objects.equals(active, bg);
-			Identifier img = bg == null ? null : backgroundId(bg.index);
 			add(new UiButton(x, rowY, thumbW, thumbH, bg == null ? "Kein Bild" : bg.name, (g, b, hov) -> {
 				box(g, b, hov ? t.surfaceHover() : t.surface());
 				if (bg == null) {
 					centered(g, "Kein Bild", b.getX() + thumbW / 2, b.getY() + thumbH / 2 - 4, t.textMuted());
-				} else if (isLoaded(img)) {
-					blitCover(g, img, b.getX() + 2, b.getY() + 2, thumbW - 4, thumbH - 4, bg.width, bg.height);
+				} else if (drawBackground(g, bg, b.getX() + 2, b.getY() + 2, thumbW - 4, thumbH - 4)) {
+					if (bg.isAnimated()) {
+						g.fill(b.getX() + 3, b.getY() + 3, b.getX() + 23, b.getY() + 13, Theme.alpha(0x000000, 0xAA));
+						text(g, "GIF", b.getX() + 5, b.getY() + 4, 0xFFFFFFFF);
+					}
 				} else {
 					centered(g, "…", b.getX() + thumbW / 2, b.getY() + thumbH / 2 - 4, t.textMuted());
 				}
 				if (sel) outline(g, b.getX(), b.getY(), thumbW, thumbH, 2, t.accent());
 			}, () -> {
 				cfg.background = bg == null ? "-" : bg.name;
+				preloadFrame = 0;
 				saveSettings();
 			})).tooltip(bg == null ? "Ohne Hintergrundbild" : bg.name);
 			x += thumbW + GAP;
@@ -312,8 +315,19 @@ public class KillSoundsScreen extends Screen {
 		return snap.backgrounds().isEmpty() ? null : snap.backgrounds().get(0);
 	}
 
-	private static Identifier backgroundId(int index) {
-		return Identifier.fromNamespaceAndPath(PackBuilder.NAMESPACE, PackBuilder.backgroundPath(index));
+	/** Das gerade passende Einzelbild (bei GIFs animiert). */
+	private static Identifier backgroundId(SoundRepository.Background bg) {
+		int frame = bg.frameAt(System.currentTimeMillis());
+		return Identifier.fromNamespaceAndPath(PackBuilder.NAMESPACE, PackBuilder.backgroundPath(bg.index, frame));
+	}
+
+	/** Zeichnet einen Hintergrund; ist das aktuelle Einzelbild noch nicht da, wird Bild 0 genommen. */
+	private boolean drawBackground(GuiGraphics g, SoundRepository.Background bg, int x, int y, int w, int h) {
+		Identifier id = backgroundId(bg);
+		if (!isLoaded(id)) id = Identifier.fromNamespaceAndPath(PackBuilder.NAMESPACE, PackBuilder.backgroundPath(bg.index, 0));
+		if (!isLoaded(id)) return false;
+		blitCover(g, id, x, y, w, h, bg.width, bg.height);
+		return true;
 	}
 
 	private boolean isLoaded(Identifier id) {
@@ -329,9 +343,24 @@ public class KillSoundsScreen extends Screen {
 		super.tick();
 		if (seenVersion != GauchosKillSounds.dataVersion()) {
 			loaded.clear();
+			preloadFrame = 0;
 			this.rebuildWidgets();
 		} else if (++tickCounter % 20 == 0) {
 			loaded.values().removeIf(present -> !present);
+		}
+		preloadGifFrames();
+	}
+
+	/** Nummer des naechsten GIF-Einzelbilds, das vorgeladen wird. */
+	private int preloadFrame = 0;
+
+	/** Laedt pro Tick ein paar Einzelbilder des aktiven GIF-Hintergrunds vor, damit es beim ersten Durchlauf nicht ruckelt. */
+	private void preloadGifFrames() {
+		SoundRepository.Background bg = effectiveBackground();
+		if (bg == null || !bg.isAnimated() || this.minecraft == null) return;
+		for (int n = 0; n < 4 && preloadFrame < bg.frames.size(); n++, preloadFrame++) {
+			Identifier id = Identifier.fromNamespaceAndPath(PackBuilder.NAMESPACE, PackBuilder.backgroundPath(bg.index, preloadFrame));
+			if (isLoaded(id)) this.minecraft.getTextureManager().getTexture(id);
 		}
 	}
 
@@ -364,9 +393,7 @@ public class KillSoundsScreen extends Screen {
 	public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float delta) {
 		if (t == null) t = Theme.current();
 		SoundRepository.Background bg = effectiveBackground();
-		Identifier id = bg == null ? null : backgroundId(bg.index);
-		if (id != null && isLoaded(id)) {
-			blitCover(g, id, 0, 0, this.width, this.height, bg.width, bg.height);
+		if (bg != null && drawBackground(g, bg, 0, 0, this.width, this.height)) {
 			int dim = GauchosKillSounds.config().backgroundDim * 255 / 100;
 			if (dim > 0) g.fill(0, 0, this.width, this.height, Theme.alpha(t.dark() ? 0x000000 : 0xFFFFFF, dim));
 		} else {

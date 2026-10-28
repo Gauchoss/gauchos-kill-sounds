@@ -54,8 +54,8 @@ public final class PackBuilder {
 		return packsDir().resolve(FOLDER);
 	}
 
-	public static String backgroundPath(int index) {
-		return "textures/background/b" + index + ".png";
+	public static String backgroundPath(int index, int frame) {
+		return "textures/background/b" + index + "_" + frame + ".png";
 	}
 
 	public static String soundEventPath(int index) {
@@ -83,9 +83,11 @@ public final class PackBuilder {
 
 		// Hintergrundbilder (weich skaliert, damit grosse Bilder nicht pixelig aussehen)
 		for (SoundRepository.Background b : snap.backgrounds()) {
-			String p = "assets/" + NAMESPACE + "/" + backgroundPath(b.index);
-			plan.put(p, b.sha);
-			texts.put(p + ".mcmeta", "{\"texture\":{\"blur\":true}}");
+			for (int f = 0; f < b.frames.size(); f++) {
+				String p = "assets/" + NAMESPACE + "/" + backgroundPath(b.index, f);
+				plan.put(p, b.frames.get(f));
+				texts.put(p + ".mcmeta", "{\"texture\":{\"blur\":true}}");
+			}
 		}
 
 		// Kill-Sounds
